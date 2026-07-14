@@ -2,12 +2,29 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+# Install server dependencies
+COPY server/package.json server/package-lock.json ./
 RUN npm install
 
-COPY . .
+# Copy server source
+COPY server/src ./src
+COPY server/tsconfig.json ./
+
+# Build server
 RUN npx tsc -b
 
+# Install frontend dependencies and build
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN cd frontend && npm install
+
+COPY frontend/ ./frontend/
+RUN cd frontend && npx vite build
+
+# Copy frontend dist to server public
+RUN cp -r frontend/dist ./public
+
 ENV OUTPUT_DIR=/tmp/output
+
+EXPOSE 3000
 
 CMD ["node", "dist/index.js"]

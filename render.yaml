@@ -3,7 +3,7 @@ services:
     name: vercel-clone
     env: docker
     dockerfilePath: server/Dockerfile
-    dockerContext: server
+    dockerContext: .
     envVars:
       - key: AWS_ACCESS_KEY_ID
         sync: false
@@ -13,11 +13,3 @@ services:
         sync: false
       - key: BUCKET_NAME
         sync: false
-      - key: REDIS_URL
-        fromDatabase:
-          name: vercel-redis
-          property: connectionString
-
-databases:
-  - name: vercel-redis
-    plan: free

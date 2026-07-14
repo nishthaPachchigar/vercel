@@ -2,22 +2,16 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { simpleGit } from "simple-git";
-import { generate } from "./utils.js";
-import { Redis } from "ioredis";
+import AWS from "aws-sdk";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
-import AWS from "aws-sdk";
 import { exec } from "child_process";
+import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const outputBase = process.env.OUTPUT_DIR || path.join(__dirname, "output");
-
-const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
-const publisher = new Redis(redisUrl);
-const subscriber = new Redis(redisUrl);
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
@@ -39,7 +33,11 @@ const mimeTypes: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-// ─── S3 Helpers ─────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────
+
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
 
 function getAllFilesDir(folderPath: string): string[] {
   let response: string[] = [];
@@ -110,16 +108,39 @@ function buildProject(id: string) {
   });
 }
 
-// ─── Deploy Worker (background) ─────────────────────────────
+// Status is stored in S3: status/{id} = "uploaded" | "deployed" | "building"
+
+async function setStatus(id: string, status: string) {
+  await s3.upload({ Body: status, Bucket: bucketName, Key: "status/" + id }).promise();
+}
+
+async function getStatus(id: string): Promise<string | null> {
+  try {
+    const data = await s3.getObject({ Bucket: bucketName, Key: "status/" + id }).promise();
+    return data.Body?.toString() || null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Background Worker: polls S3 for pending jobs ───────────
 
 async function startWorker() {
-  console.log("Worker started, waiting for jobs...");
+  console.log("Worker started, polling S3 for jobs...");
   while (true) {
     try {
-      const result = await subscriber.brpop("build-queue", 0);
-      if (result) {
-        const id = result[1];
+      const allFiles = await s3.listObjectsV2({ Bucket: bucketName, Prefix: "status/" }).promise();
+      const pendingJobs = allFiles.Contents?.filter((f) => f.Key?.startsWith("status/") && f.Size === 0) || [];
+
+      for (const job of pendingJobs) {
+        const id = job.Key?.replace("status/", "");
+        if (!id) continue;
+
+        const currentStatus = await getStatus(id);
+        if (currentStatus !== "uploaded") continue;
+
         console.log("Processing deploy: " + id);
+        await setStatus(id, "building");
 
         await downloadS3Folder("output/" + id);
         await buildProject(id);
@@ -131,13 +152,13 @@ async function startWorker() {
           copyOutputFolder(id);
         }
 
-        publisher.hset("status", id, "deployed");
+        await setStatus(id, "deployed");
         console.log("Deployed: " + id);
       }
     } catch (err) {
       console.error("Worker error:", err);
-      await new Promise((r) => setTimeout(r, 5000));
     }
+    await new Promise((r) => setTimeout(r, 5000));
   }
 }
 
@@ -147,26 +168,29 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve frontend static files
+app.use(express.static(path.join(__dirname, "../public")));
+
 app.post("/deploy", async (req, res) => {
   const repoUrl = req.body.repoUrl;
   if (!repoUrl) {
     res.status(400).json({ error: "repoUrl is required" });
     return;
   }
-  const id = generate();
+  const id = generateId();
   try {
+    fs.mkdirSync(path.join(outputBase, id), { recursive: true });
     await simpleGit().clone(repoUrl, path.join(outputBase, id));
 
     const files = getAllFilesDir(path.join(outputBase, id));
     await Promise.all(
       files.map((file) => {
-        const s3Key = file.slice(outputBase.length + 1).replace(/\\/g, "/");
+        const s3Key = "output/" + id + "/" + file.slice(outputBase.length + id.length + 2).replace(/\\/g, "/");
         return uploadFileToS3(s3Key, file);
       })
     );
 
-    publisher.lpush("build-queue", id);
-    publisher.hset("status", id, "uploaded");
+    await setStatus(id, "uploaded");
 
     res.json({ id });
   } catch (err: any) {
@@ -177,11 +201,15 @@ app.post("/deploy", async (req, res) => {
 
 app.get("/status", async (req, res) => {
   const id = req.query.id;
-  const response = await subscriber.hget("status", id as string);
-  res.json({ status: response });
+  if (!id) {
+    res.status(400).json({ error: "id is required" });
+    return;
+  }
+  const status = await getStatus(id as string);
+  res.json({ status: status || "not_found" });
 });
 
-// Request Handler - serves deployed sites
+// Request Handler - serves deployed sites from S3
 app.use(async (req, res) => {
   const host = req.hostname;
   const pathParts = req.path.split("/").filter(Boolean);
@@ -191,34 +219,33 @@ app.use(async (req, res) => {
 
   const firstSegment = pathParts[0] || "";
 
-  // Skip /deploy and /status routes
-  if (firstSegment === "deploy" || firstSegment === "status") {
-    return;
-  }
+  // Check if first segment looks like a deployed ID (not a static file, not an API route)
+  const isDeployedId = firstSegment && firstSegment !== "deploy" && firstSegment !== "status" &&
+    !firstSegment.includes(".") && firstSegment !== "assets";
 
-  if (host.split(".")[0] !== "localhost" && host.split(".")[0] !== "127") {
-    id = host.split(".")[0] ?? "";
-    filePath = req.path;
-  } else if (pathParts.length > 0) {
-    id = pathParts[0]!;
+  if (isDeployedId) {
+    id = firstSegment;
     filePath = "/" + pathParts.slice(1).join("/");
+    if (!filePath || filePath === "/") {
+      filePath = "/index.html";
+    }
+
+    const s3Key = "dist/" + id + filePath;
+
+    try {
+      const data = await s3.getObject({ Bucket: bucketName, Key: s3Key }).promise();
+      const ext = s3Key.substring(s3Key.lastIndexOf("."));
+      const contentType = mimeTypes[ext] || "application/octet-stream";
+      res.set("Content-Type", contentType);
+      res.send(data.Body);
+      return;
+    } catch {
+      // fall through to frontend
+    }
   }
 
-  if (!filePath || filePath === "/") {
-    filePath = "/index.html";
-  }
-
-  const s3Key = "dist/" + id + filePath;
-
-  try {
-    const data = await s3.getObject({ Bucket: bucketName, Key: s3Key }).promise();
-    const ext = s3Key.substring(s3Key.lastIndexOf("."));
-    const contentType = mimeTypes[ext] || "application/octet-stream";
-    res.set("Content-Type", contentType);
-    res.send(data.Body);
-  } catch {
-    res.status(404).json({ error: "Not found" });
-  }
+  // Serve frontend SPA
+  res.sendFile(path.join(__dirname, "../public/index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
