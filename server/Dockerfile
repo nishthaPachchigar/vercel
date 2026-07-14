@@ -21,7 +21,7 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npx vite build
 
 # Copy frontend dist to server public
-RUN cp -r frontend/dist ./public
+RUN rm -rf ./public && cp -r frontend/dist ./public
 
 ENV OUTPUT_DIR=/tmp/output
 
