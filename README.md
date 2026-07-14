@@ -1,6 +1,6 @@
-# Vercel Clone
+# DeployHub
 
-A full-stack Vercel clone that allows users to deploy GitHub repositories by entering a repo URL. The system clones the repo, builds it, and serves it — just like Vercel!
+One-click deployment platform. Enter a GitHub repo URL, get a live website instantly.
 
 ## Live Link
 
@@ -12,7 +12,7 @@ A full-stack Vercel clone that allows users to deploy GitHub repositories by ent
 User → Frontend (React, served by Express)
          ↓ POST /deploy
        Server (Express + S3 Worker)
-         ↓ Clone repo → Upload to S3
+         ↓ Pull repo from GitHub → Upload to S3
          ↓ Background worker polls S3 → npm install → npm run build → Upload dist to S3
          ↓ Fetch from S3 → Serve HTML/CSS/JS
        User sees deployed website
@@ -37,7 +37,7 @@ User → Frontend (React, served by Express)
 ## Project Structure
 
 ```
-vercel-clone/
+deployhub/
 ├── frontend/                    # React frontend (Vite + Tailwind)
 │   ├── src/components/
 │   │   ├── landing.tsx          # Main deploy UI
@@ -57,7 +57,7 @@ vercel-clone/
 ## How It Works
 
 1. **Deploy:** User enters GitHub repo URL in frontend
-2. **Clone:** Server clones the repo locally
+2. **Pull:** Server pulls the repo from GitHub locally
 3. **Upload:** All source files uploaded to S3 under `output/{id}/`
 4. **Status:** Deployment status written to S3 (`status/{id}`)
 5. **Build:** Background worker polls S3, downloads source, runs `npm install && npm run build`
@@ -74,7 +74,7 @@ vercel-clone/
 ### Setup
 
 ```bash
-# Clone the repo
+# Pull the repo
 git clone https://github.com/nishthaPachchigar/vercel.git
 cd vercel
 
@@ -100,8 +100,8 @@ node dist/index.js
 ### Docker
 
 ```bash
-docker build -t vercel-clone -f server/Dockerfile .
-docker run -p 3000:3000 --env-file server/.env vercel-clone
+docker build -t deployhub -f server/Dockerfile .
+docker run -p 3000:3000 --env-file server/.env deployhub
 ```
 
 ## API Endpoints
