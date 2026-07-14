@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: vercel-clone
+    env: docker
+    dockerfilePath: server/Dockerfile
+    dockerContext: server
+    envVars:
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: BUCKET_NAME
+        sync: false
+      - key: REDIS_URL
+        fromDatabase:
+          name: vercel-redis
+          property: connectionString
+
+databases:
+  - name: vercel-redis
+    plan: free

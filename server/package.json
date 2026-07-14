@@ -1,0 +1,22 @@
+{
+  "name": "vercel-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "aws-sdk": "^2.1693.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ioredis": "^5.11.1",
+    "simple-git": "^3.36.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "typescript": "^7.0.2"
+  }
+}
