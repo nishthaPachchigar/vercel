@@ -9,9 +9,11 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const redisHost = process.env.REDIS_HOST || "127.0.0.1";
-const subscriber = new Redis(redisHost);
-const publisher = new Redis(redisHost);
+const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+const subscriber = new Redis(redisUrl);
+const publisher = new Redis(redisUrl);
+
+const outputBase = process.env.OUTPUT_DIR || path.join(__dirname, "output");
 
 async function main() {
   console.log("vercel-deploy-service started, waiting for jobs...");
@@ -25,7 +27,7 @@ async function main() {
       await downloadS3Folder(`output/${id}`);
       await buildProject(id);
 
-      const distPath = path.join(__dirname, `output/${id}/dist`);
+      const distPath = path.join(outputBase, id, "dist");
       if (fs.existsSync(distPath)) {
         copyFinalDist(id);
       } else {

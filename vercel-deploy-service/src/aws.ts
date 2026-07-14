@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const outputBase = process.env.OUTPUT_DIR || path.join(__dirname, "output");
+
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
@@ -26,7 +28,7 @@ export async function downloadS3Folder(prefix: string) {
         resolve();
         return;
       }
-      const finalOutputPath = path.join(__dirname, Key);
+      const finalOutputPath = path.join(outputBase, Key);
       const outputFile = fs.createWriteStream(finalOutputPath);
       const dirName = path.dirname(finalOutputPath);
       if (!fs.existsSync(dirName)) {
@@ -45,7 +47,7 @@ export async function downloadS3Folder(prefix: string) {
 }
 
 export function copyFinalDist(id: string) {
-  const folderPath = path.join(__dirname, `output/${id}/dist`);
+  const folderPath = path.join(outputBase, id, "dist");
   const allFiles = getAllFiles(folderPath);
   allFiles.forEach((file) => {
     const s3Key = `dist/${id}/` + file.slice(folderPath.length + 1).replace(/\\/g, "/");
@@ -54,7 +56,7 @@ export function copyFinalDist(id: string) {
 }
 
 export function copyOutputFolder(id: string) {
-  const folderPath = path.join(__dirname, `output/${id}`);
+  const folderPath = path.join(outputBase, id);
   const allFiles = getAllFiles(folderPath);
   allFiles.forEach((file) => {
     const s3Key = `dist/${id}/` + file.slice(folderPath.length + 1).replace(/\\/g, "/");
