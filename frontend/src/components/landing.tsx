@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import axios from "axios"
 
-const BACKEND_UPLOAD_URL = "http://localhost:3000";
-const BACKEND_REQUEST_URL = "http://localhost:3001";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
 export function Landing() {
   const [repoUrl, setRepoUrl] = useState("");
@@ -34,13 +33,13 @@ export function Landing() {
             </div>
             <Button onClick={async () => {
               setUploading(true);
-              const res = await axios.post(`${BACKEND_UPLOAD_URL}/deploy`, {
+              const res = await axios.post(`${BACKEND_URL}/deploy`, {
                 repoUrl: repoUrl
               });
               setUploadId(res.data.id);
               setUploading(false);
               const interval = setInterval(async () => {
-                const response = await axios.get(`${BACKEND_UPLOAD_URL}/status?id=${res.data.id}`);
+                const response = await axios.get(`${BACKEND_URL}/status?id=${res.data.id}`);
 
                 if (response.data.status === "deployed") {
                   clearInterval(interval);
@@ -61,11 +60,11 @@ export function Landing() {
         <CardContent>
           <div className="space-y-2">
             <Label htmlFor="deployed-url">Deployed URL</Label>
-            <Input id="deployed-url" readOnly type="url" value={`${BACKEND_REQUEST_URL}/${uploadId}/index.html`} />
+            <Input id="deployed-url" readOnly type="url" value={`${BACKEND_URL}/${uploadId}/index.html`} />
           </div>
           <br />
           <Button className="w-full" variant="outline">
-            <a href={`${BACKEND_REQUEST_URL}/${uploadId}/index.html`} target="_blank">
+            <a href={`${BACKEND_URL}/${uploadId}/index.html`} target="_blank">
               Visit Website
             </a>
           </Button>
