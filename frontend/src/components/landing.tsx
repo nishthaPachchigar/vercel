@@ -33,19 +33,27 @@ export function Landing() {
             </div>
             <Button onClick={async () => {
               setUploading(true);
-              const res = await axios.post(`${BACKEND_URL}/deploy`, {
-                repoUrl: repoUrl
-              });
-              setUploadId(res.data.id);
-              setUploading(false);
-              const interval = setInterval(async () => {
-                const response = await axios.get(`${BACKEND_URL}/status?id=${res.data.id}`);
-
-                if (response.data.status === "deployed") {
-                  clearInterval(interval);
-                  setDeployed(true);
-                }
-              }, 3000)
+              try {
+                const res = await axios.post(`${BACKEND_URL}/deploy`, {
+                  repoUrl: repoUrl
+                });
+                setUploadId(res.data.id);
+                setUploading(false);
+                const interval = setInterval(async () => {
+                  try {
+                    const response = await axios.get(`${BACKEND_URL}/status?id=${res.data.id}`);
+                    if (response.data.status === "deployed") {
+                      clearInterval(interval);
+                      setDeployed(true);
+                    }
+                  } catch {
+                    // keep polling
+                  }
+                }, 3000)
+              } catch (err) {
+                alert("Deploy failed. Please check the repo URL and try again.");
+                setUploading(false);
+              }
             }} disabled={uploadId !== "" || uploading} className="w-full" type="submit">
               {uploadId ? `Deploying (${uploadId})` : uploading ? "Uploading..." : "Upload"}
             </Button>

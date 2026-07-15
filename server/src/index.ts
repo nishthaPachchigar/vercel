@@ -130,7 +130,7 @@ async function startWorker() {
   while (true) {
     try {
       const allFiles = await s3.listObjectsV2({ Bucket: bucketName, Prefix: "status/" }).promise();
-      const pendingJobs = allFiles.Contents?.filter((f) => f.Key?.startsWith("status/") && f.Size === 0) || [];
+      const pendingJobs = allFiles.Contents?.filter((f) => f.Key?.startsWith("status/")) || [];
 
       for (const job of pendingJobs) {
         const id = job.Key?.replace("status/", "");
